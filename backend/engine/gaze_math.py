@@ -30,3 +30,13 @@ def gaze_math(left_eye_inner_corner, left_eye_outer_corner, nose_tip, left_upper
         "t_y": t_Y,
         "pitch_signal": pitch_signal
     }
+def eye_openness_math(left_upper_eyelid, left_lower_eyelid, left_eye_outer_corner, left_eye_inner_corner):
+    """
+    Pure math, one frame's landmarks in, a single ratio out. Same shape
+    as gaze_math() above — no camera/loop state, reused by both
+    camera_thread.py (blink detection) and any calibration/tuning script
+    that wants to inspect eye_openness directly.
+    """
+    eye_corner_distance = abs(left_eye_outer_corner.x - left_eye_inner_corner.x)
+    eye_gap = abs(left_upper_eyelid.y - left_lower_eyelid.y)
+    return eye_gap / eye_corner_distance
