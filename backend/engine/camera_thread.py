@@ -6,7 +6,7 @@ import statistics
 
 from .gaze_math import gaze_math, eye_openness_math
 
-model_path = 'backend/model/face_landmarker.task' 
+model_path = 'backend/model/face_landmarker.task'
 
 base_options = python.BaseOptions(model_asset_path=model_path)
 options = vision.FaceLandmarkerOptions(
@@ -18,42 +18,28 @@ options = vision.FaceLandmarkerOptions(
 landmarker = vision.FaceLandmarker.create_from_options(options)
 
 # --- Blink detection tuning ---
-# PLACEHOLDER VALUES — carried over from cv-practice 04, NOT yet
-# re-measured on EyeControl's actual camera/lighting/setup. Flagged
-# here so this doesn't get silently trusted. Re-measure the same way
-# 04 did: hold a deliberate blink, time it, confirm closed_frame_count
-# crosses BLINK_FRAMES_REQUIRED at roughly the real elapsed time you
-# intended (~0.5s), adjusting for EyeControl's actual measured fps.
-BLINK_THRESHOLD = 0.10
-BLINK_FRAMES_REQUIRED = 7
+# Ported from cv-practice 05, NOT re-measured on EyeControl's own
+# camera/lighting yet. 05's values came from live-timed testing on
+# cv-practice's setup — treated as a trusted starting point, same as
+# zone_classifier.py's merge decision, but still flagged for
+# re-verification here if blink timing feels off in practice.
+BLINK_THRESHOLD = 0.16
+BLINK_FRAMES_REQUIRED = 3
+REOPEN_FRAMES_REQUIRED = 3
+PITCH_FREEZE_THRESHOLD = 0.35
 
 # --- Live smoothing buffers ---
-# Module-level so they persist across every frame of the program's
-# lifetime, same reasoning as cv-practice 03/05.
 buffer_x = []
 buffer_y = []
 buffer_pitch = []
 
 
 def run_camera(shared_data):
-    """
-    Thread A's job: runs forever in a background daemon thread. Reads
-    webcam frames, extracts landmarks, and delegates the actual math to
-    gaze_math()/eye_openness_math() in gaze_math.py — this file owns the
-    loop and shared_data plumbing, not the formulas themselves.
-
-    Expects/writes:
-      shared_data["running"]        - controls the loop
-      shared_data["t_x"]            - live smoothed horizontal gaze ratio
-      shared_data["t_y"]            - live smoothed vertical gaze ratio
-      shared_data["pitch_signal"]   - live smoothed head-pitch signal
-      shared_data["eye_openness"]   - live eye_openness value (every frame)
-      shared_data["blink_detected"] - flips True for one blink; caller
-                                       resets it back to False after handling
-    """
     cap = cv2.VideoCapture(0)
     frame_timestamp_ms = 0
     closed_frame_count = 0
+    open_frame_count = 0
+    blink_armed = True  # False right after a blink fires, until reopen confirmed
 
     while shared_data["running"] == True:
         ret, frame = cap.read()
@@ -76,26 +62,18 @@ def run_camera(shared_data):
             left_upper_eyelid = landmarks[159]
             left_lower_eyelid = landmarks[145]
 
-            # --- eye_openness: computed FIRST, every frame, unconditionally ---
+            # --- eye_openness: every frame, unconditionally ---
             eye_openness = eye_openness_math(
                 left_upper_eyelid, left_lower_eyelid,
                 left_eye_outer_corner, left_eye_inner_corner
             )
             shared_data["eye_openness"] = eye_openness
 
-            # --- blink counting: always runs, open or closed, so the
-            # counter actually resets when the eye reopens ---
-            if eye_openness < BLINK_THRESHOLD:
-                closed_frame_count += 1
-            else:
-                closed_frame_count = 0
-
-            if closed_frame_count == BLINK_FRAMES_REQUIRED:
-                shared_data["blink_detected"] = True
-
-            # --- gaze/pitch: only trusted (and only fed into the
-            # smoothing buffers) when the eye is open enough ---
-            if eye_openness >= BLINK_THRESHOLD:
+            # --- gaze/pitch: only trusted into the smoothing buffers
+            # when eye is clearly open (PITCH_FREEZE_THRESHOLD, NOT
+            # BLINK_THRESHOLD — separate job, separate bar, see 05's
+            # PITCH_FREEZE_THRESHOLD comment for the live-data reasoning) ---
+            if eye_openness >= PITCH_FREEZE_THRESHOLD:
                 gaze = gaze_math(
                     left_eye_inner_corner, left_eye_outer_corner, nose_tip,
                     left_upper_eyelid, left_lower_eyelid, left_iris_center
@@ -116,10 +94,27 @@ def run_camera(shared_data):
                 shared_data["t_y"] = statistics.median(buffer_y)
                 shared_data["pitch_signal"] = statistics.median(buffer_pitch)
 
+            # --- blink counting + reopen-gate: always runs, every
+            # frame, regardless of the pitch-freeze branch above ---
+            if eye_openness < BLINK_THRESHOLD:
+                open_frame_count = 0
+                if blink_armed:
+                    closed_frame_count += 1
+            else:
+                closed_frame_count = 0
+                open_frame_count += 1
+                if open_frame_count >= REOPEN_FRAMES_REQUIRED:
+                    blink_armed = True
+
+            if blink_armed and closed_frame_count == BLINK_FRAMES_REQUIRED:
+                shared_data["blink_detected"] = True
+                blink_armed = False
+                closed_frame_count = 0
+
     cap.release()
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     shared_data = {
         "t_x": 0,
         "t_y": 0,
@@ -130,7 +125,7 @@ if __name__ == "__main__":
     }
     import threading
     import time
-    camera_thread = threading.Thread(target=run_camera, args=(shared_data,),daemon=True)
+    camera_thread = threading.Thread(target=run_camera, args=(shared_data,), daemon=True)
     camera_thread.start()
     try:
         while True:
@@ -142,7 +137,7 @@ if __name__ == "__main__":
             )
             if shared_data["blink_detected"]:
                 print("BLINK DETECTED")
-                shared_data["blink_detected"] = False  # reset so it only fires once per blink
+                shared_data["blink_detected"] = False
             time.sleep(0.1)
     except KeyboardInterrupt:
         shared_data["running"] = False
