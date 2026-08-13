@@ -18,7 +18,7 @@ class CursorWindow:
         self.sm = state_machine
         self.pitch_baseline = pitch_baseline
         self.last_gazed_zone = 0  # which of the 2 boxes gaze currently classifies into
-
+        self.root = tk.Toplevel(root)
         self.root = tk.Tk()
         self.root.title("EyeControl - Cursor Control")
 

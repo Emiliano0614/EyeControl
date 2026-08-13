@@ -1,10 +1,12 @@
 import threading
 import time
-
+import asyncio
+import tkinter as tk
 from backend.engine.camera_thread import run_camera
 from backend.engine.zone_classifier import ZoneClassifier
 from backend.engine.state_machine import CursorStateMachine
 from backend.engine.cursor_window import CursorWindow
+from backend import server
 
 shared_data = {
     "t_x": 0,
@@ -38,5 +40,21 @@ print("stdev — gx:", zc.std_gx)
 
 sm = CursorStateMachine(pitch_baseline=pitch_baseline, scroll_delta=0.15)
 
-window = CursorWindow(shared_data, zc, sm, pitch_baseline)
-window.run()
+server_thread = threading.Thread(
+    target=server.run_server_thread,
+    args=(shared_data, sm),
+    daemon=True
+)
+server_thread.start()
+
+root = tk.Tk()
+root.title("EyeControl Launcher")
+
+def open_cursor_window():
+    window = CursorWindow(root, shared_data, zc, sm, pitch_baseline)
+    window.poll()
+
+launch_button = tk.Button(root, text="Open Drill Tree", command=open_cursor_window)
+launch_button.pack(padx=20, pady=20)
+
+root.mainloop()

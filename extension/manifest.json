@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "EyeControl",
+  "version": "1.0",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "permissions": ["tabs"],
+  "host_permissions": ["http://localhost:8765/*", "ws://localhost:8765/*"]
+}
