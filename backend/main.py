@@ -38,7 +38,7 @@ zc = ZoneClassifier(calibration_dir="backend/calibration")
 print("Zone centroids:", zc.zone_centroids)
 print("stdev — gx:", zc.std_gx)
 
-sm = CursorStateMachine(pitch_baseline=pitch_baseline, scroll_delta=0.15)
+sm = CursorStateMachine(pitch_baseline=pitch_baseline, scroll_delta=0.25)
 
 server_thread = threading.Thread(
     target=server.run_server_thread,

@@ -41,5 +41,6 @@ async def start_server(shared_data, state_machine):
         print("WebSocket server running on ws://localhost:8765")
         await asyncio.Future()  # run forever
 
+
 def run_server_thread(shared_data, state_machine):
     asyncio.run(start_server(shared_data, state_machine))

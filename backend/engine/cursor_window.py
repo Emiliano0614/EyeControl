@@ -12,14 +12,16 @@ class CursorWindow:
 
     POLL_MS = 50  # matches calibration_window.py's polling interval
 
-    def __init__(self, shared_data, zone_classifier, state_machine, pitch_baseline):
+    def __init__(self, root, shared_data, zone_classifier, state_machine, pitch_baseline):
         self.shared_data = shared_data
         self.zc = zone_classifier
         self.sm = state_machine
+        self.sm.path = []
+        self.sm.typed_input = ""
         self.pitch_baseline = pitch_baseline
         self.last_gazed_zone = 0  # which of the 2 boxes gaze currently classifies into
+        self.closed = False
         self.root = tk.Toplevel(root)
-        self.root = tk.Tk()
         self.root.title("EyeControl - Cursor Control")
 
         self.root.attributes("-fullscreen", True)
@@ -35,7 +37,8 @@ class CursorWindow:
         )
         self.status_label.pack(fill="x", padx=10, pady=5)
 
-        self.root.bind("<Escape>", lambda event: self._quit())
+        self.root.bind("<Escape>", lambda event: self._close_window())
+        self.root.protocol("WM_DELETE_WINDOW", self._close_window)
 
         # Box layout: 2 equal-width boxes spanning the FULL real screen
         # width, matching the 2-zone left/right geometry the classifier
@@ -48,7 +51,14 @@ class CursorWindow:
         self.shared_data["running"] = False
         self.root.destroy()
 
+    def _close_window(self):
+        self.closed = True
+        self.root.destroy()
+
     def poll(self):
+        if self.closed:
+            return
+
         gaze_x = self.shared_data["t_x"]
         pitch = self.shared_data["pitch_signal"]
         delta = pitch - self.pitch_baseline
@@ -57,10 +67,12 @@ class CursorWindow:
         if mode == "SELECT":
             zone = self.zc.predict_zone(gaze_x)
             self.last_gazed_zone = zone[0]
-
             if self.shared_data["blink_detected"]:
                 self.shared_data["blink_detected"] = False
                 result = self.sm.confirm_zone(self.last_gazed_zone)
+                if result.get("event") == "key_typed" and result.get("key") == "ENTER":
+                    self._close_window()
+                    return
         else:
             print(f"MODE={mode} pitch={pitch:.3f} delta={delta:+.3f}")
             self.shared_data["blink_detected"] = False
@@ -96,7 +108,3 @@ class CursorWindow:
             f"   INPUT: {self.sm.typed_input}"
         )
         self.status_label.config(text=status)
-
-    def run(self):
-        self.poll()  # kicks off the recurring poll loop before mainloop blocks
-        self.root.mainloop()
