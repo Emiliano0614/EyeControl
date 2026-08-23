@@ -81,7 +81,22 @@ document.addEventListener("fullscreenchange", () => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const { path, typed_input } = message;
+
+  // CHANGED: mode and scroll_direction weren't destructured here
+  // before — this listener only ever handled the ENTER-confirmation
+  // path (path/typed_input). SCROLL messages arrived but were
+  // silently ignored, since nothing checked for them.
+  const { mode, path, typed_input, scroll_direction } = message;
+
+  // ADDED: the entire SCROLL branch. Without this, mode=="SCROLL"
+  // messages had no handler at all — server.py could broadcast scroll
+  // state all day and nothing on the page would move.
+  if (mode === "SCROLL") {
+    const scrollAmount = 40; // px per message; tune to taste
+    window.scrollBy(0, scroll_direction === "DOWN" ? scrollAmount : -scrollAmount);
+    previousTypedInput = typed_input;
+    return;
+  }
 
   if (path.length === 0 && typed_input === previousTypedInput && previousTypedInput !== null) {
     console.log("ENTER confirmed! Final value:", typed_input);

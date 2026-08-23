@@ -14,15 +14,31 @@ async def handler(websocket, shared_data, state_machine):
         path = state_machine.path
         typed_input = state_machine.typed_input
 
-        if mode != last_mode or path != last_path or typed_input != last_typed_input:
+        changed = (mode != last_mode or path != last_path or typed_input != last_typed_input)
+
+        if changed:
             last_mode = mode
             last_path = list(path)  # snapshot — path is mutated in place elsewhere
             last_typed_input = typed_input
 
+        # CHANGED (scroll bug fix): originally this only sent when
+        # changed was True, which meant SCROLL only ever announced
+        # itself ONCE per tilt — content.js would scrollBy() a single
+        # time and then wait for the next state change, giving a tiny
+        # one-shot jump instead of continuous scrolling. Now it also
+        # sends on every tick while mode == "SCROLL", so the browser
+        # keeps getting told to scroll for as long as the tilt holds.
+        # SELECT/typed_input behavior is untouched — still change-only,
+        # so ENTER-confirmation logic in content.js doesn't get spammed.
+        if changed or mode == "SCROLL":
             message = json.dumps({
                 "mode": mode,
                 "path": path,
                 "typed_input": typed_input,
+                # CHANGED: scroll_direction was missing from this payload
+                # entirely at first — the browser had no way to know UP
+                # vs DOWN even when it did receive a SCROLL message.
+                "scroll_direction": state_machine.scroll_direction,
             })
             await websocket.send(message)
 

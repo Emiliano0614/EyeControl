@@ -38,7 +38,12 @@ zc = ZoneClassifier(calibration_dir="backend/calibration")
 print("Zone centroids:", zc.zone_centroids)
 print("stdev — gx:", zc.std_gx)
 
-sm = CursorStateMachine(pitch_baseline=pitch_baseline, scroll_delta=0.25)
+# CHANGED: was CursorStateMachine(pitch_baseline=pitch_baseline, scroll_delta=0.25) —
+# scroll_delta split into separate down/up thresholds since a single
+# shared value forced an uncomfortable, straining tilt to trigger
+# scroll-up. 0.15 for up was chosen to match a comfortable tilt range;
+# down stays at the original 0.25.
+sm = CursorStateMachine(pitch_baseline=pitch_baseline, scroll_delta_down=0.25, scroll_delta_up=0.15)
 
 server_thread = threading.Thread(
     target=server.run_server_thread,

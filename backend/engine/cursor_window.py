@@ -64,6 +64,16 @@ class CursorWindow:
         delta = pitch - self.pitch_baseline
         mode = self.sm.update_pitch(pitch)
 
+        # DEBUG (added while diagnosing the scroll bug): originally
+        # this print only ran inside the else branch below (i.e. only
+        # on non-SELECT frames). Moved to run every single tick,
+        # unconditionally, so we could see the raw delta value and the
+        # enter/exit debounce counters build up and decay in real time
+        # while tilting — that's what revealed the debounce logic
+        # itself was working fine, and the real bug was server.py only
+        # broadcasting once per state change instead of continuously
+        # during SCROLL. Safe to remove now, or keep for future tuning.
+
         if mode == "SELECT":
             zone = self.zc.predict_zone(gaze_x)
             self.last_gazed_zone = zone[0]
